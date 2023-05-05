@@ -13,7 +13,7 @@ import numpy as np
  
 class ProblemDef(ABC):
     """ Abstract Problem Definition Class.
-    Problem Definition should implement the abstract methods below.
+    Specific problem definition class should implement the abstract methods below.
     """
     
     @abstractmethod
@@ -47,20 +47,19 @@ class Population():
 
         Parameters
         ----------
-        problem : instance of problem definition class inherite from 
+        problem : instance of problem definition class inherited from 
                   abstract ProblemDef.
 
         Returns
         -------
         None.
         """
-        
         self.problem = problem
         self.chr_len = problem.chromosome_length()
         self.members = []
         self.fitnesses = []
         self.best_ofv = -np.Inf
-        self.best = None
+        self.ofv_hist = []
         self.MUT_RATIO = 0.0030  
         
         
@@ -73,16 +72,16 @@ class Population():
         pop_size : int (default=20)
                    Size of the population.
         """
-        
         for i in range(pop_size):           
             chromosome = np.round(np.random.uniform(size=self.chr_len)).astype('uint8')
             self.members.append(chromosome)
     
+    
     def calc_fitness(self):
         """
-        Calculates fitness values for each population member.
+        Calculates objective functions and corresponing fitness values 
+        for each population member.
         """
-
         obj_fcn_vals = np.zeros( len(self.members) )
         for i, seq in enumerate(self.members):
             ofv = self.problem.objective_fcn(seq)
@@ -90,15 +89,20 @@ class Population():
             
             if ofv > self.best_ofv:
                 self.best_ofv = ofv
-                self.best_seq = seq
-                #self.save_sequence(seq, cost)
+                self.best_seq = seq.copy()
         
-        self.pop_best_ofv = obj_fcn_vals.min()               
-        
+        self.pop_best_ofv = obj_fcn_vals.max()
+        self.ofv_hist.append(self.pop_best_ofv)
+              
         self.fitnesses = self.problem.fitness_fcn(obj_fcn_vals)
-                
+        
 
     def create_new_generation(self):
+        """ Creates new generation (list of population members)
+        with crossover according to fitness values and
+        applying mutation
+        """
+        
         # Crossover
         new_members = []
         # For each pair, select with fitness
@@ -137,7 +141,7 @@ class Population():
     def crossover(self, parent1, parent2):
         
         c1, c2 = self.crossover_loc()        
-        #print("Crossover locations:", c1, c2)    
+  
         # Crossover region
         cross = np.array([False]*self.chr_len).astype(bool)
         cross[c1:c2] = True
@@ -171,51 +175,65 @@ class Population():
         seq[r0] = 1
         seq[r1] = 0 
     
-    
-    def save_sequence(self, seq, cost):
-        fname = f"sequences/{int(cost):07d}.npy"
-        np.save(fname, seq)
         
     def resume_population(self):
+        """ Load pickled population for continuation of generations """
         file = open('population.pkl', 'rb')
         D = pickle.load(file)
         self.members = D["members"]
+        self.best_ofv =  -np.Inf # D["best_ofv"]  #
+        self.best_seq = D["best_seq"]
+        
+        if "ofv_hist" in D:
+            self.ofv_hist = D["ofv_hist"]
+            
+        # Inject best sequence to the population
+        self.members[0] = self.best_seq.copy()
               
+        
     def pickle_population(self):
-        D = {"members": self.members }
+        D = {"members": self.members,
+             "best_ofv": self.best_ofv,
+             "best_seq": self.best_seq,
+             "ofv_hist": self.ofv_hist}
         file = open('population.pkl', 'wb')
         pickle.dump(D, file)
 
 
-
-
-def runGA(population, max_generation=10000, terminal_ofv=0):
+def runGA(population, pop_size=20, resume=False, clear_hist=False, max_generation=10000, terminal_ofv=0):
     """ Run GA generations. 
     """
-    
-    population.initialize_members()
-    population.calc_fitness()
-    
-    generation = 1
-    st = "Iter:{0:6d} > Pop. best: {1:6.1f}  Overall best: {2:6.1f} "
-    
-    print("Running generations...")
-    while (generation <= max_generation):
-                
-        population.create_new_generation()        
-        population.calc_fitness()
-        
+    st = "Gen.:{0:6d} > Pop. best: {1:7.4f}  Overall best: {2:7.4f} "
+    def print_line(generation, population):
         print_str = st.format( 
             generation, 
             population.pop_best_ofv,
             population.best_ofv)
         
-        print(print_str, end="\r")
+        print(print_str)  #, end="\r"
+    
+    generation = 0
+    if resume:
+        print("Loading existing population...")
+        population.resume_population()
+        if clear_hist:
+            population.ofv_hist = []
+    else:
+        print("Initializing population...")
+        population.initialize_members(pop_size)
+    
+    print("Running generations...")
+    population.calc_fitness()
+    print_line(generation, population)
+    
+    while (generation <= max_generation):
+        generation += 1        
+        population.create_new_generation()        
+        population.calc_fitness()
+        print_line(generation, population)
         
         if population.best_ofv >= terminal_ofv:            
             break
-        
-        generation += 1
     
     if population.best_ofv >= terminal_ofv:
         print("\nRun ended reaching terminal objective function value.")
