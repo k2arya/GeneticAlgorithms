@@ -121,7 +121,7 @@ class Population():
                 self.best_ofv = ofv
                 self.best_seq = seq.copy()
         
-        self.pop_best_ofv = obj_fcn_vals.max()
+        self.pop_best_ofv = obj_fcn_vals.min()
         self.ofv_hist.append(self.pop_best_ofv)
               
         self.fitnesses = self.problem.fitness_fcn(obj_fcn_vals)
@@ -221,7 +221,7 @@ class Population():
         file = open(file, 'rb')
         D = pickle.load(file)
         self.members = D["members"]
-        self.best_ofv =  -np.Inf 
+        self.best_ofv =  np.Inf 
         self.best_seq = D["best_seq"] 
         self.ofv_hist = D["ofv_hist"]
             
